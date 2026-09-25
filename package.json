@@ -1,0 +1,31 @@
+{
+  "name": "home-assistant-energy-profiler-ui-card",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Home Assistant Energy Profiler dashboard card with contextual modal details",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nicola-spreafico/home-assistant-energy-profiler-ui-card.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/model.test.mjs",
+    "test:browser": "playwright test",
+    "check": "npm run test && npm run build && npm run test:browser",
+    "dev": "node scripts/serve.mjs",
+    "check:dist": "npm run build && git diff --exit-code -- dist/"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "esbuild": "0.28.2"
+  },
+  "homepage": "https://github.com/nicola-spreafico/home-assistant-energy-profiler-ui-card#readme",
+  "bugs": {
+    "url": "https://github.com/nicola-spreafico/home-assistant-energy-profiler-ui-card/issues"
+  }
+}

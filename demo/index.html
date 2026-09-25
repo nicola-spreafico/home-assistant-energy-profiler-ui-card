@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Energy Profiler · Card preview</title>
+  <style>
+    :root { color-scheme:light; font-family:system-ui,sans-serif; background:#f2f6f6; color:#172b35; --primary-color:#007d79; --primary-text-color:#172b35; --secondary-text-color:#607580; --card-background-color:#fff; --divider-color:#dfe8e9; }
+    :root.dark { color-scheme:dark; background:#111c24; color:#e8eff1; --primary-color:#6dd9c7; --primary-text-color:#e8eff1; --secondary-text-color:#adbdc8; --card-background-color:#1a2933; --divider-color:#334651; }
+    body { margin:0; padding:48px 24px; }
+    main { max-width:1080px; margin:auto; }
+    h1 { font-size:clamp(30px,5vw,48px); font-weight:650; letter-spacing:-.035em; margin:10px 0; }
+    .intro { max-width:600px; color:var(--secondary-text-color); line-height:1.7; }
+    .tag { text-transform:uppercase; letter-spacing:.17em; color:var(--primary-color); font-size:12px; font-weight:600; }
+    .controls { display:flex; flex-wrap:wrap; gap:10px; margin:28px 0; }
+    .controls button { padding:9px 16px; background:var(--card-background-color); color:inherit; border:1px solid var(--divider-color); border-radius:20px; cursor:pointer; font:inherit; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr)); gap:24px; align-items:start; }
+    h2 { font-size:13px; font-weight:500; color:var(--secondary-text-color); margin:0 0 12px; }
+    .notice { margin-top:30px; color:var(--secondary-text-color); font-size:12px; }
+    #event { min-height:24px; }
+  </style>
+</head>
+<body><main>
+  <span class="tag">Energy Profiler / Dashboard card</span>
+  <h1>Your appliance, at a glance.</h1>
+  <p class="intro">Follow consumption, see where the energy came from and find the right time for a cycle. Open a profile to explore its measurements.</p>
+  <div class="controls">
+    <button id="theme">Toggle theme</button><button id="language">English / Italiano</button>
+    <button id="availability">Toggle availability</button><button id="update">Simulate a live update</button>
+  </div>
+  <div class="grid">
+    <section><h2>Full profile · solar, battery and cycle tracking</h2><energy-profiler-card id="full"></energy-profiler-card></section>
+    <section><h2>Basic profile · power and energy only</h2><energy-profiler-card id="basic"></energy-profiler-card></section>
+  </div>
+  <p class="notice">Interactive preview with fictional data. No connection to Home Assistant. In Home Assistant, selecting a measurement opens its entity details.</p>
+  <p class="notice" id="event" aria-live="polite"></p>
+</main><script type="module" src="/demo/preview.js"></script></body></html>
