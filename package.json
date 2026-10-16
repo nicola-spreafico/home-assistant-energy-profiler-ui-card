@@ -21,7 +21,7 @@
     "check:dist": "npm run build && git diff --exit-code -- dist/"
   },
   "devDependencies": {
-    "@playwright/test": "1.58.2",
+    "@playwright/test": "1.64.0",
     "esbuild": "0.28.2"
   },
   "homepage": "https://github.com/nicola-spreafico/home-assistant-energy-profiler-ui-card#readme",
