@@ -51,6 +51,8 @@ export function fixture({ minimal = false, unavailable = false, renamed = false 
     add("cycle_completed_energy", 1.31, "kWh");
     add("cycle_completed_duration", 5480, "s");
     add("cycle_completed_cost", .39, "€");
+    add("cycle_completed_start", "2026-09-24T10:00:00Z", undefined, { device_class: "timestamp" });
+    add("cycle_completed_stop", "2026-09-24T11:31:20Z", undefined, { device_class: "timestamp" });
     add("cycle_start_snapshot", "2026-09-25T10:00:00Z", undefined, { initial_energy: 300 });
     add("energy_from_self_percentage_daily_live", 85, "%");
     add("battery_can_cover_average_cycle", "on", undefined, { average_cycle_energy_kwh: 1.28, battery_available_energy_kwh: 4.7 });
@@ -69,6 +71,13 @@ export function fixture({ minimal = false, unavailable = false, renamed = false 
     states, locale: { language: "en" }, config: { time_zone: "Europe/Rome" }, connection,
     callWS: async message => {
       if (message.type === "config/entity_registry/list") return registry;
+      if (message.type === "recorder/statistics_during_period") {
+        const now = Date.now();
+        return Object.fromEntries(message.statistic_ids.map(id => [id, Array.from({ length: 14 }, (_, i) => ({
+          start: now - (14 - i) * 86400000, end: now - (13 - i) * 86400000,
+          state: Math.round((.4 + Math.abs(Math.sin(i * 1.7)) * 2.2) * 100) / 100,
+        }))]));
+      }
       throw new Error("Unsupported demo request");
     },
     demoRegistry: registry,

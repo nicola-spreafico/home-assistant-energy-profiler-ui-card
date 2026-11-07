@@ -1,7 +1,10 @@
-import { PERIODS, GROUPS, normalizeConfig, entityIndex, getEntity, currentPower, sourceShares, validShares, numeric, availablePeriods, profilePrefixes, groupFor, isTechnical, escapeHtml as esc } from "./model.js";
+import { normalizeConfig, entityIndex, getEntity, currentPower, sourceShares, validShares, numeric, availablePeriods, profilePrefixes, escapeHtml as esc } from "./model.js";
 import { language, translate, metricLabel, formatState } from "./localize.js";
 import { styles } from "./styles.js";
 import "./editor.js";
+import { renderDetail } from "./detail-view.js";
+import { detailStyles } from "./detail-styles.js";
+import { fetchDailyHistory } from "./detail-model.js";
 
 const registryRequests = new WeakMap();
 function registryFor(hass) {
@@ -15,9 +18,6 @@ function registryFor(hass) {
   return request;
 }
 
-const ENERGY_METRICS = ["", "_cost", "_from_grid_cost", "_from_grid_savings", "_from_self", "_from_grid", "_from_solar", "_from_battery", "_from_self_percentage", "_from_grid_percentage", "_from_solar_percentage", "_from_battery_percentage", "_from_self_index", "_from_self_advantage"];
-const CYCLE_METRICS = ["cycle_validation_status", "cycles_count_lifetime", "cycle_completed_start", "cycle_completed_stop", "cycle_completed_duration", "cycle_completed_energy", "cycle_completed_cost", "cycle_completed_from_self_percentage", "cycle_live_duration", "cycle_live_energy", "cycle_live_cost", "cycle_live_from_self_percentage", "cycles_energy_mean", "cycles_duration_mean", "cycles_cost_mean", "cycles_from_self_percentage_mean"];
-const READINESS = ["battery_can_cover_average_cycle", "battery_ready_for_average_cycle_at", "solar_ready_for_average_cycle_at"];
 
 export class EnergyProfilerCard extends HTMLElement {
   constructor() {
@@ -25,7 +25,8 @@ export class EnergyProfilerCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._registry = [];
     this._search = "";
-    this.shadowRoot.innerHTML = `<style>${styles}</style>
+    this._detailTab = "summary";
+    this.shadowRoot.innerHTML = `<style>${styles}${detailStyles}</style>
       <article class="card"><button type="button" class="launch" aria-haspopup="dialog"><div class="compact"></div></button></article>
       <dialog aria-labelledby="ep-title">
         <header class="dialog-head">
@@ -63,7 +64,31 @@ export class EnergyProfilerCard extends HTMLElement {
       this._search = event.target.value;
       this._renderPanels();
     });
+    this.shadowRoot.querySelector(".panels").addEventListener("keydown", event => {
+      const button = event.target.closest(".detail-nav button");
+      if (!button || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      const buttons = [...this.shadowRoot.querySelectorAll(".detail-nav button")];
+      const index = buttons.indexOf(button);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
+      event.preventDefault();
+      buttons[next].click();
+      this.shadowRoot.querySelector('.detail-nav button[data-tab="' + buttons[next].dataset.tab + '"]')?.focus();
+    });
     this.shadowRoot.querySelector(".panels").addEventListener("click", event => {
+      const tab = event.target.closest("button[data-tab]");
+      if (tab) {
+        this._detailTab = tab.dataset.tab;
+        this._search = "";
+        this.shadowRoot.querySelector(".search").value = "";
+        this._renderPanels();
+        this.shadowRoot.querySelector(".dialog-body").scrollTo({ top: 0 });
+        return;
+      }
+      if (event.target.closest("[data-refresh-history]")) {
+        this._ensureHistory(true);
+        this._renderPanels();
+        return;
+      }
       const row = event.target.closest("button[data-entity]");
       if (!row) return;
       const entityId = row.dataset.entity;
@@ -77,6 +102,9 @@ export class EnergyProfilerCard extends HTMLElement {
 
   setConfig(config) {
     this._config = normalizeConfig(config);
+    this._historyTicket = (this._historyTicket || 0) + 1;
+    this._historyKey = undefined;
+    this._history = undefined;
     this._requestedPeriod = this._config.period;
     this._render();
   }
@@ -92,6 +120,8 @@ export class EnergyProfilerCard extends HTMLElement {
     this._registryUnsubscribe?.();
     this._registryUnsubscribe = undefined;
     this._registryOwner = undefined;
+    this._historyTicket = (this._historyTicket || 0) + 1;
+    this._historyKey = undefined;
     this._generation = (this._generation || 0) + 1;
   }
 
@@ -161,9 +191,10 @@ export class EnergyProfilerCard extends HTMLElement {
     const cost = gridCost.state ? gridCost : this._entity("energy_cost_" + this._period);
     const status = this._entity("status");
     const stats = [[this._t("power"), this._value(power.state)], [this._t("consumption"), this._value(energy.state)]];
-    if (cost.state) stats.push([this._t(gridCost.state ? "gridCost" : "cost"), this._value(cost.state)]);
+    const secondary = [];
+    if (cost.state) secondary.push([this._t(gridCost.state ? "gridCost" : "cost"), this._value(cost.state)]);
     const mean = this._entity("cycles_energy_mean");
-    if (mean.state) stats.push([metricLabel("cycles_energy_mean", this._lang), this._value(mean.state)]);
+    if (mean.state) secondary.push([this._t("cycleCompact"), this._value(mean.state)]);
     const shares = this._config.show_sources ? sourceShares(this._config, this._hass.states, this._index, this._period) : [];
     const hasEntities = [...this._index.values()].some(id => this._hass.states[id]);
     const coverage = this._entity("battery_can_cover_average_cycle");
@@ -173,8 +204,9 @@ export class EnergyProfilerCard extends HTMLElement {
       ${status.state ? `<span class="status">${esc(this._value(status.state))}</span>` : ""}</div>
       ${hasEntities ? `<div class="stats">${stats.map(([label, value]) => `<div class="stat"><small>${esc(label)}</small><strong>${esc(value)}</strong></div>`).join("")}</div>`
         : `<p class="notice">${esc(this._t("noData"))}</p>`}
+      ${hasEntities && secondary.length ? `<div class="secondary-stats">${secondary.map(([label, value]) => `<span><small>${esc(label)}</small><strong>${esc(value)}</strong></span>`).join("")}</div>` : ""}
       ${this._sharesHtml(shares)}
-      ${this._config.show_readiness && coverage.state ? `<div class="readiness">${esc(this._t("cover"))}: <strong>${esc(this._coverage(coverage.state))}</strong></div>` : ""}
+      ${this._config.show_readiness && coverage.state ? `<div class="readiness">${esc(this._t("coverCompact"))}: <strong>${esc(this._coverage(coverage.state))}</strong></div>` : ""}
       <div class="foot"><span>${esc(this._t(this._period))}</span><span>${esc(this._t("details"))} →</span></div>`);
     if (this._dialog.open) this._renderPanels();
   }
@@ -196,86 +228,38 @@ export class EnergyProfilerCard extends HTMLElement {
     if (!this._dialog.open) this._dialog.showModal();
   }
 
-  _row(key, showId = false) {
-    const { id, state } = this._entity(key);
-    if (!state) return "";
-    const value = key === "battery_can_cover_average_cycle" ? this._coverage(state) : this._value(state);
-    return `<button type="button" class="row" data-entity="${esc(id)}"><span class="label">${esc(metricLabel(key, this._lang))}${showId ? `<small>${esc(id)}</small>` : ""}</span><span class="value">${esc(value)}</span></button>`;
-  }
-
-  _curated(group) {
-    let keys = [];
-    if (group === "overview") keys = ["status", "power_max", "power_from_self", "power_from_grid", "power_from_solar", "power_from_battery"];
-    if (["energy", "running", "standby"].includes(group)) {
-      const base = group === "energy" ? "energy" : group + "_energy";
-      keys = ENERGY_METRICS.map(metric => base + metric + "_" + this._period);
-      if (this._period !== "lifetime") keys.push(base + "_lifetime");
-      if (group !== "energy") keys.unshift(group);
-      if (group === "standby") keys.push("standby_duration");
-      if (group === "energy") {
-        for (const period of PERIODS) keys.push("energy_cost_instant_" + period, "energy_cost_instant_from_grid_" + period);
-      }
+  _ensureHistory(refresh = false) {
+    const entity = this._entity("energy_daily");
+    if (!entity.state || !this._hass.callWS) {
+      this._history = { status: "unsupported", points: [] };
+      return;
     }
-    if (group === "cycles") {
-      keys = [...CYCLE_METRICS, "cycles_count_" + this._period, "cycles_duration_" + this._period];
-      if (this._config.show_readiness) keys.push(...READINESS);
-    }
-    return [...new Set(keys)].filter(key => this._exists(key));
+    const owner = this._hass.connection || this._hass;
+    const key = this._config.prefix + "|" + entity.id;
+    if (!refresh && this._historyKey === key && this._historyOwner === owner && Date.now() - this._historyTime < 300000) return;
+    this._historyKey = key;
+    this._historyOwner = owner;
+    this._historyTime = Date.now();
+    const ticket = this._historyTicket = (this._historyTicket || 0) + 1;
+    this._history = { status: "loading", points: [] };
+    fetchDailyHistory(this._hass, entity.id, { refresh }).then(points => {
+      if (ticket !== this._historyTicket || !this.isConnected) return;
+      this._history = { status: "ready", points };
+      if (this._dialog.open) this._renderPanels();
+    }).catch(() => {
+      if (ticket !== this._historyTicket || !this.isConnected) return;
+      this._history = { status: "error", points: [] };
+      if (this._dialog.open) this._renderPanels();
+    });
   }
 
   _renderPanels() {
     if (!this._index) return;
-    const host = this.shadowRoot.querySelector(".panels");
-    const query = this._search.trim().toLocaleLowerCase(this._lang);
-    let found = false;
-    for (const group of GROUPS) {
-      const allKeys = [...this._index.keys()].filter(key =>
-        groupFor(key) === group && this._exists(key) &&
-        (this._config.show_technical || !isTechnical(key)) &&
-        (this._config.show_readiness || !READINESS.includes(key)));
-      let keys = query ? allKeys.filter(key => [key, metricLabel(key, this._lang), this._index.get(key)]
-        .some(value => value.toLocaleLowerCase(this._lang).includes(query))) : this._curated(group);
-      if (query && !keys.length || !allKeys.length) {
-        host.querySelector('[data-group="' + group + '"]')?.remove();
-        continue;
-      }
-      found = true;
-      let details = host.querySelector('[data-group="' + group + '"]');
-      if (!details) {
-        details = document.createElement("details");
-        details.dataset.group = group;
-        details.innerHTML = '<summary></summary><div class="panel"><div class="primary rows"></div><p class="note notice" hidden></p><details class="extra"><summary></summary><div class="rows"></div></details><details class="attributes"><summary></summary><pre></pre></details></div>';
-        details.open = group === "energy" || Boolean(query);
-        const next = [...host.children].find(child => GROUPS.indexOf(child.dataset.group) > GROUPS.indexOf(group));
-        host.insertBefore(details, next || null);
-      }
-      if (query) details.open = true;
-      details.querySelector("summary").textContent = this._t(group);
-      this._replace(details.querySelector(".primary"), keys.map(key => this._row(key)).join(""));
-      const remaining = allKeys.filter(key => !keys.includes(key)).sort();
-      const extra = details.querySelector(".extra");
-      extra.hidden = Boolean(query) || remaining.length === 0;
-      extra.querySelector("summary").textContent = this._t("extra") + " (" + remaining.length + ")";
-      this._replace(extra.querySelector(".rows"), remaining.map(key => this._row(key, true)).join(""));
-      const note = details.querySelector(".note");
-      note.hidden = group !== "cycles" || !this._config.show_readiness || !READINESS.some(key => this._exists(key));
-      note.textContent = this._t("estimate") + (this._exists("solar_ready_for_average_cycle_at") ? " " + this._t("forecastNote") : "");
-      const attrs = details.querySelector(".attributes");
-      attrs.hidden = !this._config.show_technical;
-      attrs.querySelector("summary").textContent = this._t("attributes");
-      attrs.querySelector("pre").textContent = this._config.show_technical
-        ? JSON.stringify(Object.fromEntries(allKeys.map(key => [this._index.get(key), this._entity(key).state.attributes])), null, 2) : "";
-    }
-    let empty = host.querySelector(".empty");
-    if (!found && !empty) {
-      empty = document.createElement("p");
-      empty.className = "empty notice";
-      host.append(empty);
-    }
-    if (empty) { empty.hidden = found; empty.textContent = this._t("noResults"); }
+    if (!this._search && ["summary", "energy"].includes(this._detailTab)) this._ensureHistory();
+    renderDetail(this);
   }
 
-  getCardSize() { return 4; }
+  getCardSize() { return 3; }
   getGridOptions() { return { columns: 12, min_columns: 6 }; }
   static getConfigElement() { return document.createElement("energy-profiler-card-editor"); }
   static getStubConfig(hass) { return { prefix: profilePrefixes(hass?.states)[0] || "dishwasher_em", period: "daily" }; }

@@ -53,5 +53,30 @@ pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; max-height:2
   .launch { padding:18px; } .toolbar { grid-template-columns:1fr; gap:8px; }
   .title { font-size:16px; } .status { max-width:110px; white-space:normal; text-align:center; }
 }
+
+/* Compact dashboard summary; detail-dialog typography and layout stay separate. */
+.card .launch { padding:14px 16px 12px; }
+.card .head { gap:8px; }
+.card .identity { gap:9px; }
+.card .mark { width:30px; height:30px; border-radius:10px; }
+.card .mark svg { width:20px; height:20px; }
+.card .eyebrow { display:none; }
+.card .title { font-size:15px; line-height:1.35; }
+.card .status { padding:3px 7px; font-size:10px; max-width:100px; }
+.card .stats { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:12px 0 8px; }
+.card .stat small { font-size:10px; margin-bottom:2px; }
+.card .stat strong { font-size:21px; line-height:1.25; letter-spacing:-.025em; }
+.secondary-stats { display:flex; flex-wrap:wrap; gap:5px 14px; padding-bottom:9px; font-size:11px; }
+.secondary-stats > span { display:flex; gap:6px; align-items:baseline; min-width:0; }
+.secondary-stats small { color:var(--ep-muted); font-size:10px; }
+.secondary-stats strong { font-size:11px; font-weight:600; }
+.card .source-heading { display:none; }
+.card .strip { height:4px; margin:3px 0 7px; }
+.card .legend { font-size:10px; gap:5px 10px; }
+.card .dot { width:6px; height:6px; }
+.card .readiness { margin-top:9px; padding-top:8px; font-size:11px; }
+.card .foot { margin-top:9px; font-size:10px; }
+.card .notice { font-size:11px; margin:10px 0; }
+
 @media(prefers-reduced-motion:no-preference) { dialog[open] { animation:appear .16s ease-out; } @keyframes appear { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } } }
 `;

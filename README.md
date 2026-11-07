@@ -1,6 +1,6 @@
 # Energy Profiler Card
 
-A Home Assistant dashboard card for [Energy Profiler](https://github.com/nicola-spreafico/home-assistant-energy-profiler). A compact appliance summary opens a searchable dialog grouped into Overview, Energy, Running, Cycles and Standby.
+A Home Assistant dashboard card for [Energy Profiler](https://github.com/nicola-spreafico/home-assistant-energy-profiler). A compact appliance summary opens a visual profile with topic navigation, energy charts, cycle comparisons and planning estimates.
 
 **Browser Mod is not required.** The card owns its native modal dialog and uses Home Assistant's more-info event when you select a measurement. It never starts an appliance or changes a device.
 
@@ -8,15 +8,18 @@ A Home Assistant dashboard card for [Energy Profiler](https://github.com/nicola-
 
 ![Desktop summary with fictional data](docs/images/summary.png)
 
-[Mobile detail dialog](docs/images/mobile-details.png) · Screenshots use fictional demo data.
+[Desktop detail](docs/images/details.png) · [Cycle comparison](docs/images/cycles.png) · [Mobile detail](docs/images/mobile-details.png) · Screenshots use fictional demo data.
 
 ## Features
 
 - Period consumption, current power when available, grid cost and average cycle energy.
 - Solar / battery / grid energy shares, or self / grid when separate sources are absent.
 - Cycle battery coverage and readiness timestamps when exposed by the integration.
-- Period selector, collapsible sections and measurement search.
-- Optional technical attributes; missing sensor families are hidden.
+- Topic navigation: Overview, Energy, Cycles, Plan a cycle, Standby, Performance and Measurements.
+- Daily consumption history from Lean long-term statistics, source donut, cost bars, running/standby breakdown and cycle progress against the average.
+- Side-by-side live / last-completed / average cycle measurements, with readable durations.
+- Period selector and a separate semantic measurement reference/search.
+- Optional technical measurement reference; missing sensor families are hidden.
 - English and Italian, automatic Home Assistant language selection, light/dark themes and mobile layout.
 - Visual configuration editor and support for renamed entities.
 
@@ -69,7 +72,7 @@ Use the integration's **complete entity prefix**, including `_em` or `_eim`. For
 | `language` | `auto` | `auto`, `en` or `it` |
 | `show_sources` | `true` | Source-share summary |
 | `show_readiness` | `true` | Battery coverage and readiness measurements |
-| `show_technical` | `false` | Include technical helper entities and raw attributes |
+| `show_technical` | `false` | Include technical helpers and show entity IDs |
 | `entities` | `{}` | YAML-only mapping from measurement suffix to entity ID |
 
 Supported periods: `hourly`, `daily`, `weekly`, `monthly`, `bimonthly`, `quarterly`, `yearly`, `lifetime`. Only available consumption periods appear; the first available period is used if the configured period is absent.
@@ -88,21 +91,39 @@ entities:
 
 ### Compact view
 
+The compact summary prioritizes current power and period consumption. Cost and average-cycle energy sit on a smaller secondary line; source shares and battery coverage use compact rows. Full comparisons, charts and planning stay in the detail dialog.
+
 Consumption, cost and source percentages refer to the **selected accounting period**, not instantaneous flow. When grid cost exists it is preferred; otherwise the card labels the integration's total consumption cost separately.
 
 Current power comes from `power_entity`, or the sum of `power_from_self` and `power_from_grid`. Solar and battery are already part of self: they are **not added a second time**. Peak power is never substituted for current power. An unavailable explicit power sensor remains unavailable.
 
 Three source channels are used only when both solar and battery percentage entities exist. Otherwise self and grid are used. An incomplete, unavailable or inconsistent percentage set does not draw a misleading stacked bar. Unknown/unavailable values are not converted into zero.
 
-### Detail groups
+### Detail topics
 
-- **Overview:** status, peak power and available source power measurements.
-- **Energy:** consumption, costs, source attribution and self-energy indicators for the selected period.
-- **Running:** running-only energy and related measurements.
-- **Cycles:** completed/live cycles, cycle averages, period counts, battery coverage and readiness.
-- **Standby:** standby state, duration and energy measurements.
+The detail opens on a visual **Overview**, rather than an entity list. The accounting period selector affects period consumption, cost, sources and performance; **live power, current-cycle values and cycle averages keep their own meanings**.
 
-Each group offers additional measurements from the profile. Search includes labels, suffixes and entity IDs across all periods. Selecting a measurement opens Home Assistant's standard entity detail. Escape, the close button or a backdrop click closes the card dialog.
+| Topic | Content |
+| --- | --- |
+| Overview | Period consumption, current power and status, source donut, active cycle and daily history |
+| Energy | Daily history, source percentages and kWh, grid purchases / avoided purchases, running / standby split, projections and accounting windows |
+| Cycles | Active run, elapsed-time comparison with the mean, average energy/duration/value, valid count, live / completed / average comparison table, last-cycle boundaries and validation |
+| Plan a cycle | Battery coverage, usable energy versus average demand, battery-ready time and Solcast window |
+| Standby | Idle consumption and duration, its source mix and cost, and its place in total consumption |
+| Performance | Self-energy index against the house baseline (1×) and extra self-produced kWh |
+| Measurements | Reference grouped by meaning and context, filtered to the selected period and lifetime |
+
+Optional topics disappear when their entities are absent. The reference does not open automatically. Search includes every available period, groups matches by meaning, and keeps technical helpers hidden unless `show_technical` is enabled. Selecting a measurement opens Home Assistant's entity detail. Escape, the close button or the backdrop closes the card dialog; arrow keys navigate topic buttons.
+
+Unknown readings remain unknown. A running signal that is unavailable does not claim an appliance is idle. The elapsed-time meter is **a comparison with the observed mean**, not program progress; it stops at 100% and identifies overruns without predicting a negative remaining time.
+
+### Charts and history
+
+The history chart reads the last 15 days from the profile's **daily Lean consumption meter**, via Home Assistant's read-only Recorder statistics API. It uses each row's `state` (the day's consumption), not `sum` (the accumulated statistics baseline). Missing dates are not filled with zero. The latest day can be partial. Chart values are also available as a table.
+
+Queries run only when the relevant detail is opened, are cached/shared for five minutes, and can be refreshed manually. Renamed daily entities use their resolved registry IDs. Empty history, disabled/missing daily meters and access/query failures have separate messages; none prevents the rest of the card from working.
+
+The accounting-window tiles (today, this month, this year, lifetime) are labeled separately: overlapping windows are not plotted as a historical trend. Source charts do not double-count self along with its solar/battery parts. Mode charts retain an unclassified remainder and withhold a proportional split if the readings are inconsistent.
 
 ### Battery and forecast
 
@@ -110,11 +131,11 @@ Battery coverage requires the integration's cycle and battery-energy configurati
 
 Solcast is optional for the card itself. Solar forecast readiness appears only when the integration exposes that sensor after its Solcast configuration. Without battery or forecast entities, those features disappear and the rest of the card works.
 
-### History and disabled entities
-
-The period selector displays **current entity states**; it does not retrieve the previous month, reconstruct historical rankings or query long-term statistics. Historical details opened through Home Assistant depend on Recorder and the entity's supported history.
+### Disabled entities and historical scope
 
 The card cannot enable disabled integration entities. Enable required entities in Home Assistant or omit those features. Technical helper entities are hidden by default.
+
+The period selector displays **current accounting windows**. The daily chart retrieves recorded long-term daily statistics; it does not select previous-month totals, reconstruct historical rankings or fetch a list of individual past cycles. The cycle comparison uses the integration's live, last-completed and average entities. Home Assistant's more-info history depends on Recorder and each entity's supported history.
 
 ## Development
 
